@@ -104,6 +104,7 @@ def load_shortcut(path):
 # --------------------------- canonical normalization ---------------------------
 def normalize(actions):
     """Canonicalize metadata and unambiguous menu/text-comparison shapes."""
+    # The native importer can truncate control flow when IDs live outside params.
     for a in actions:
         p = a.setdefault('WFWorkflowActionParameters', {})
         for k in ('UUID', 'GroupingIdentifier'):
@@ -115,6 +116,8 @@ def normalize(actions):
         if type(p.get('WFControlFlowMode')) is not int or p['WFControlFlowMode'] != 0:
             continue
         if ident == 'is.workflow.actions.choosefrommenu':
+            # iOS can relabel branches from the item list without moving their bodies.
+            # Keep branch titles/bodies together and align only the matching item list.
             group, items = p.get('GroupingIdentifier'), p.get('WFMenuItems')
             if not isinstance(group, str) or not group or not isinstance(items, list):
                 continue
@@ -126,6 +129,7 @@ def normalize(actions):
                         for _, other in markers)):
                 continue
             modes = [other['WFWorkflowActionParameters']['WFControlFlowMode'] for _, other in markers]
+            # Native modes: 0 starts a group, 1 starts a branch/else, 2 ends it.
             if modes != [0] + [1] * (len(markers) - 2) + [2]:
                 continue
             # Reject broken nesting instead of guessing where branch bodies end.
@@ -179,6 +183,8 @@ def normalize(actions):
                     not isinstance(value.get('VariableName'), str)):
                 continue
             properties = value.get('Aggrandizements', [])
+            # Retain explicit types and unknown modifiers; only known property access
+            # can safely precede the added Text conversion.
             if (not isinstance(properties, list) or
                     any(not isinstance(prop, dict) or
                         prop.get('Type') != 'WFPropertyVariableAggrandizement' or
@@ -186,6 +192,8 @@ def normalize(actions):
                         set(prop) - {'Type', 'PropertyName'}
                         for prop in properties)):
                 continue
+            # Reproduce the captured input-type repair without changing either
+            # operand or the operator. Fresh iOS UI confirmation remains pending.
             value['Aggrandizements'] = properties + [
                 {'Type': 'WFCoercionVariableAggrandizement', 'CoercionItemClass': 'WFStringContentItem'}]
     return actions
